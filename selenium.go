@@ -97,8 +97,6 @@ func login(page *agouti.Page, user string) error {
 	// click
 	if err := submitBtn.Click(); err != nil {
 		return err
-	} else {
-		log.Println("Login:", users[userIndex])
 	}
 
 	return nil
@@ -132,8 +130,6 @@ func comparePeriod(page *agouti.Page, date string) error {
 			targetObj := createTimeDate(targetY, targetM, targetD)
 			hour = subtractHour(sentObj, targetObj)
 
-			time.Sleep(1 * time.Second)
-
 			if hour == 0 {
 				break
 			}
@@ -151,8 +147,6 @@ func comparePeriod(page *agouti.Page, date string) error {
 			targetY, targetM, targetD = extractDate(screenDate)
 			targetObj := createTimeDate(targetY, targetM, targetD)
 			hour = subtractHour(sentObj, targetObj)
-
-			time.Sleep(1 * time.Second)
 
 			if hour == 0 {
 				break
@@ -267,7 +261,7 @@ func clickBtnByID(page *agouti.Page, id string) error {
 }
 
 func clickBtnByClass(page *agouti.Page, class string) error {
-	btn := page.FindByClass(class)
+	btn := page.FirstByClass(class)
 	if _, err := btn.Count(); err != nil {
 		return err
 	}
@@ -377,64 +371,108 @@ func setDate(page *agouti.Page, startHour string, startMinute string, endHour st
 	}
 	endM.Select(endMinutes[endMinuteIdx])
 
-	time.Sleep(1 * time.Second)
 	return nil
 }
 
-func getFacilities(page *agouti.Page) ([]string, error) {
+func getFacilities(page *agouti.Page) (map[string]string, error) {
 	// click search button
 	if err := clickBtnByClass(page, "jsch-entry-plant-group-button"); err != nil {
 		return nil, err
 	}
 
 	dom := getPageDOM(page).Find("div[class='sch-entry-plant-free-list']").Find("ul").Children()
-	facilities := make([]string, dom.Length())
-	dom.Each(func(i int, s *goquery.Selection) {
-		facilities[i] = s.Find("label").Text()
+	facilities := make(map[string]string)
+	dom.Each(func(_ int, s *goquery.Selection) {
+		name := s.Find("label").Text()
+		pid, _ := s.Find("span").Attr("data-pid")
+		facilities[name] = pid
 	})
 
 	return facilities, nil
 }
 
-func schedule(page *agouti.Page) error {
+func schedule(page *agouti.Page) (map[string]string, error) {
 	// login
 	if err := login(page, loginName); err != nil {
-		return err
+		return nil, err
 	}
 	time.Sleep(3 * time.Second) // Desknetsの仕様上、ログイン後、新しくコンテンツが読み込まれるまでに時間がかかる
 
 	// click schedule button
 	if err := clickBtnByPath(page, "#portal-content-1000 > div.portal-content-body > ul > li:nth-child(1)"); err != nil {
-		return err
+		return nil, err
 	}
 
 	// 送信された日付の画面を表示させる
 	date := "2020年03月16日(月)"
 	if err := comparePeriod(page, date); err != nil {
-		return err
+		return nil, err
 	}
 
 	// move to the booking page
 	if err := doubleClickByPath(page, "#jsch-schweekgrp > form > div.sch-gweek.sch-cal-group-week.jsch-cal-list.jco-print-template.sch-data-view-area > div.sch-gcal-target.me.cal-h-cell.jsch-cal > div.cal-h-week > table > tbody > tr > td:nth-child(1)"); err != nil {
-		return err
+		return nil, err
 	}
 
 	// set start and end datetime
 	if err := setDate(page, "10時", "30分", "12時", "0分"); err != nil {
-		return err
+		return nil, err
 	}
 
 	// click facility button
 	if err := clickBtnByPath(page, "#inputfrm > div.co-ebtnarea.sch-ebtnarea > a:nth-child(1)"); err != nil {
-		return err
+		return nil, err
 	}
 
 	// 空いている施設一覧を取得する
 	facilities, err := getFacilities(page)
 	if err != nil {
+		return nil, err
+	}
+
+	return facilities, nil
+}
+
+func getPID(data map[string]string, target string) string {
+	for k, v := range data {
+		if k == target {
+			return v
+		}
+	}
+	return ""
+}
+
+func execute(page *agouti.Page, title string, room string) error {
+	facilities, err := schedule(page)
+	if err != nil {
 		return err
 	}
-	log.Println(facilities)
+
+	// check the checkbox
+	pid := getPID(facilities, room)
+	selector := "input[value='" + pid + "']"
+	checkBx := page.Find(selector)
+	if _, err := checkBx.Count(); err != nil {
+		return err
+	}
+	checkBx.Check()
+
+	// click OK button
+	if err := clickBtnByPath(page, "#neodialog-sch-edit-plant > div.ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix > div > button:nth-child(1)"); err != nil {
+		return err
+	}
+
+	// set title
+	detail := page.FindByName("detail")
+	if _, err := detail.Count(); err != nil {
+		log.Fatalln(err)
+	}
+	detail.Fill(title)
+
+	// submit
+	if err := clickBtnByPath(page, "#inputfrm > div.co-actionwrap.top > div > input[type=submit]:nth-child(1)"); err != nil {
+		log.Fatalln(err)
+	}
 
 	return nil
 }
@@ -455,7 +493,8 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	schedule(page)
+	// schedule(page)
+	execute(page, "東京都対策委員会", "Room #1@Singapore")
 
 	time.Sleep(3 * time.Second)
 }
