@@ -1,9 +1,10 @@
-package selenium
+package main
 
 import (
 	"errors"
-	"fmt"
-	"math/rand"
+	"log"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,416 +15,447 @@ import (
 
 var (
 	url       = "https://trial.desknets.com/cgi-bin/dneo/dneo.cgi?"
-	loginName = "高橋 健太"
+	loginName = "岡田陽太"
 )
 
 func getPageDOM(page *agouti.Page) *goquery.Document {
 	// get whole page
 	wholePage, err := page.HTML()
 	if err != nil {
-		fmt.Println("Failed to get whole page:", err)
+		log.Fatalln(err)
 	}
-	// use goquery
+
+	// goquery
 	readerOfPage := strings.NewReader(wholePage)
 	pageDom, err := goquery.NewDocumentFromReader(readerOfPage)
 	if err != nil {
-		fmt.Println("Failed to get page dom:", err)
+		log.Fatalln(err)
 	}
 	return pageDom
 }
 
-func searchIndex(dates []string, target string) (int, error) {
-	index := -1
-	for i, date := range dates {
-		if date == target {
-			index = i
-		}
-		// fmt.Println(i, date)
-	}
-	if index == -1 {
-		errMsg := "Failed to set parameter: " + target
-		return -1, errors.New(errMsg)
-	} else {
-		return index, nil
-	}
+func getSelectBoxByClass(page *agouti.Page, class string) ([]string, error) {
+	selector := "select[class='" + class + "']"
+	dom := getPageDOM(page).Find(selector).First().Children()
+	options := make([]string, dom.Length())
+	dom.Each(func(i int, s *goquery.Selection) {
+		options[i] = s.Text()
+	})
+	return options, nil
 }
 
-func login(page *agouti.Page, user string) {
-	// get user list
-	usersDom := getPageDOM(page).Find("select[name='_ID']").Children()
-	users := make([]string, usersDom.Length())
-	usersDom.Each(func(i int, sel *goquery.Selection) {
-		users[i] = sel.Text()
-		// fmt.Println(i, users[i])
+func getSelectBoxByName(page *agouti.Page, name string) ([]string, error) {
+	selector := "select[name='" + name + "']"
+	dom := getPageDOM(page).Find(selector).First().Children()
+	options := make([]string, dom.Length())
+	dom.Each(func(i int, s *goquery.Selection) {
+		options[i] = s.Text()
 	})
+	return options, nil
+}
+
+func searchIndex(data []string, target string) (int, error) {
+	index := -1
+	for i, v := range data {
+		if v == target {
+			index = i
+		}
+	}
+	if index == -1 {
+		errMsg := "failed to set parameter: " + target
+		return index, errors.New(errMsg)
+	}
+	return index, nil
+}
+
+func login(page *agouti.Page, user string) error {
+	// get user list
+	users, err := getSelectBoxByName(page, "uid")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	// search index
 	userIndex, err := searchIndex(users, user)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
+
 	// set login user
-	name := page.FindByName("_ID")
+	name := page.FindByName("uid")
 	if _, err := name.Count(); err != nil {
-		fmt.Println("Cannot find path:", err)
+		return err
 	}
 	name.Select(users[userIndex])
-	// click login button
-	submitBtn := page.FindByName("Submit")
+
+	// search submit button
+	submitBtn := page.FindByID("login-btn")
 	if _, err := submitBtn.Count(); err != nil {
-		fmt.Println("Failed to login:", err)
+		return err
 	}
+
 	// click
 	if err := submitBtn.Click(); err != nil {
-		fmt.Println("Faild to click:", err)
+		return err
 	} else {
-		fmt.Println("Login complete:", users[userIndex])
+		log.Println("Login:", users[userIndex])
 	}
-}
-
-func booking(page *agouti.Page, date string, start string, end string, title string, room string) error {
-	reserveButton := page.FindByXPath("//*[@id=\"content-wrapper\"]/div[4]/div/div[1]/table/tbody/tr/td[1]/table/tbody/tr/td[1]/span/span/a")
-	_, err := reserveButton.Count()
-	if err != nil {
-		fmt.Println("Cannot find path:", err)
-		return err
-	}
-	reserveButton.Click()
-
-	// set the date
-	yearDom := getPageDOM(page).Find("select[name='SetDate.Year']").Children()
-	monthDom := getPageDOM(page).Find("select[name='SetDate.Month']").Children()
-	dayDom := getPageDOM(page).Find("select[name='SetDate.Day']").Children()
-	startHourDom := getPageDOM(page).Find("select[name='SetTime.Hour']").Children()
-	startMinuteDom := getPageDOM(page).Find("select[name='SetTime.Minute']").Children()
-	endHourDom := getPageDOM(page).Find("select[name='EndTime.Hour']").Children()
-	endMinuteDom := getPageDOM(page).Find("select[name='EndTime.Minute']").Children()
-
-	years := make([]string, yearDom.Length())
-	months := make([]string, monthDom.Length())
-	days := make([]string, dayDom.Length())
-	startHours := make([]string, startHourDom.Length())
-	startMinutes := make([]string, startMinuteDom.Length())
-	endHours := make([]string, endHourDom.Length())
-	endMinutes := make([]string, endMinuteDom.Length())
-
-	yearDom.Each(func(i int, g *goquery.Selection) {
-		tx := g.Text()
-		years[i] = tx
-	})
-	monthDom.Each(func(i int, g *goquery.Selection) {
-		tx := g.Text()
-		months[i] = tx
-	})
-	dayDom.Each(func(i int, g *goquery.Selection) {
-		tx := g.Text()
-		days[i] = tx
-	})
-	startHourDom.Each(func(i int, g *goquery.Selection) {
-		tx := g.Text()
-		startHours[i] = tx
-	})
-	startMinuteDom.Each(func(i int, g *goquery.Selection) {
-		tx := g.Text()
-		startMinutes[i] = tx
-	})
-	endHourDom.Each(func(i int, g *goquery.Selection) {
-		tx := g.Text()
-		endHours[i] = tx
-	})
-	endMinuteDom.Each(func(i int, g *goquery.Selection) {
-		tx := g.Text()
-		endMinutes[i] = tx
-	})
-
-	dateSplit := strings.Split(date, "/")
-	yearIndex, err := searchIndex(years, dateSplit[0])
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-	monthIndex, err := searchIndex(months, dateSplit[1])
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-	dayIndex, err := searchIndex(days, dateSplit[2])
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-
-	startSplit := strings.Split(start, ":")
-	endSplit := strings.Split(end, ":")
-	startHourIndex, err := searchIndex(startHours, startSplit[0]+"時")
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-	startMinuteIndex, err := searchIndex(startMinutes, startSplit[1]+"分")
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-	endHourIndex, err := searchIndex(endHours, endSplit[0]+"時")
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-	endMinuteIndex, err := searchIndex(endMinutes, endSplit[1]+"分")
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-
-	yearX := page.FindByName("SetDate.Year")
-	_, err = yearX.Count()
-	if err != nil {
-		fmt.Println("Cannot find path:", err)
-		return err
-	}
-	monthX := page.FindByName("SetDate.Month")
-	_, err = monthX.Count()
-	if err != nil {
-		fmt.Println("Cannot find path:", err)
-		return err
-	}
-	dayX := page.FindByName("SetDate.Day")
-	_, err = dayX.Count()
-	if err != nil {
-		fmt.Println("Cannot find path:", err)
-		return err
-	}
-	startHourX := page.FindByName("SetTime.Hour")
-	_, err = startHourX.Count()
-	if err != nil {
-		fmt.Println("Cannot find path:", err)
-		return err
-	}
-	startMinuteX := page.FindByName("SetTime.Minute")
-	_, err = startMinuteX.Count()
-	if err != nil {
-		fmt.Println("Cannot find path:", err)
-		return err
-	}
-	endHourX := page.FindByName("EndTime.Hour")
-	_, err = endHourX.Count()
-	if err != nil {
-		fmt.Println("Cannot find path:", err)
-		return err
-	}
-	endMinuteX := page.FindByName("EndTime.Minute")
-	_, err = endMinuteX.Count()
-	if err != nil {
-		fmt.Println("Cannot find path:", err)
-		return err
-	}
-
-	err = yearX.Select(years[yearIndex])
-	if err != nil {
-		fmt.Println("Select Error:", err)
-		return err
-	}
-	err = monthX.Select(months[monthIndex])
-	if err != nil {
-		fmt.Println("Select Error:", err)
-		return err
-	}
-	err = dayX.Select(days[dayIndex])
-	if err != nil {
-		fmt.Println("Select Error:", err)
-		return err
-	}
-	err = startHourX.Select(startHours[startHourIndex])
-	if err != nil {
-		fmt.Println("Select Error:", err)
-		return err
-	}
-	err = startMinuteX.Select(startMinutes[startMinuteIndex])
-	if err != nil {
-		fmt.Println("Select Error:", err)
-		return err
-	}
-	err = endHourX.Select(endHours[endHourIndex])
-	if err != nil {
-		fmt.Println("Select Error:", err)
-		return err
-	}
-	err = endMinuteX.Select(endMinutes[endMinuteIndex])
-	if err != nil {
-		fmt.Println("Select Error:", err)
-		return err
-	}
-
-	// set the title
-	detail := page.FindByName("Detail")
-	if _, err := detail.Count(); err != nil {
-		fmt.Println("Failed to find path:", err)
-		return err
-	}
-	detail.Fill(title)
-
-	// choose room
-	xpath := ""
-	switch room {
-	case "第一会議室":
-		xpath = "//*[@id=\"content-wrapper\"]/div[4]/div/form/div[2]/table/tbody/tr/td/table/tbody/tr[2]/td/div/div[1]/div/table/tbody/tr[7]/td/table/tbody/tr[1]/td[3]/select/option[1]"
-	case "第二会議室":
-		xpath = "//*[@id=\"content-wrapper\"]/div[4]/div/form/div[2]/table/tbody/tr/td/table/tbody/tr[2]/td/div/div[1]/div/table/tbody/tr[7]/td/table/tbody/tr[1]/td[3]/select/option[2]"
-	case "打合せルーム":
-		xpath = "//*[@id=\"content-wrapper\"]/div[4]/div/form/div[2]/table/tbody/tr/td/table/tbody/tr[2]/td/div/div[1]/div/table/tbody/tr[7]/td/table/tbody/tr[1]/td[3]/select/option[3]"
-	}
-	theRoomY := page.FindByXPath(xpath)
-	theRoomY.Click()
-
-	time.Sleep(2 * time.Second)
-
-	// submit to make a reservation
-	entryButton := page.FindByName("Entry")
-	_, err = entryButton.Count()
-	if err != nil {
-		println("Login Error:", err)
-		return err
-	}
-	entryButton.Click()
-	fmt.Println("Booking complete:", years[yearIndex], months[monthIndex], days[dayIndex], startHours[startHourIndex], startMinutes[startMinuteIndex], endHours[endHourIndex], endMinutes[endMinuteIndex])
 
 	return nil
 }
 
-func Execute(year string, month string, day string, week string, start string, end string, people string, title string, room string) error {
-	// set of Chrome
+func comparePeriod(page *agouti.Page, date string) error {
+	screenDate, err := checkScreenDate(page, "#jsch-schweekgrp > form > div.co-actionwrap.top > div.jsch-cal-date-header.sch-cal-date-header > span.cal-date.sch-term-text > span:nth-child(1)")
+	if err != nil {
+		return err
+	}
+
+	targetY, targetM, targetD := extractDate(screenDate)
+	sentY, sentM, sentD := extractDate(date)
+
+	targetObj := createTimeDate(targetY, targetM, targetD)
+	sentObj := createTimeDate(sentY, sentM, sentD)
+
+	// 送られてきた日付の画面まで遷移する
+	hour := subtractHour(sentObj, targetObj)
+	if hour > 0 {
+		for {
+			if err := clickBtnByPath(page, "#jsch-schweekgrp > form > div.co-actionwrap.top > div.jsch-cal-date-header.sch-cal-date-header > span.cal-switch > a.co-ymd-next"); err != nil {
+				log.Fatalln(err)
+			}
+
+			screenDate, err = checkScreenDate(page, "#jsch-schweekgrp > form > div.co-actionwrap.top > div.jsch-cal-date-header.sch-cal-date-header > span.cal-date.sch-term-text > span:nth-child(1)")
+			if err != nil {
+				return err
+			}
+			targetY, targetM, targetD = extractDate(screenDate)
+			targetObj := createTimeDate(targetY, targetM, targetD)
+			hour = subtractHour(sentObj, targetObj)
+
+			time.Sleep(1 * time.Second)
+
+			if hour == 0 {
+				break
+			}
+		}
+	} else if hour < 0 {
+		for {
+			if err := clickBtnByPath(page, "#jsch-schweekgrp > form > div.co-actionwrap.top > div.jsch-cal-date-header.sch-cal-date-header > span.cal-switch > a.co-ymd-prev"); err != nil {
+				return err
+			}
+
+			screenDate, err = checkScreenDate(page, "#jsch-schweekgrp > form > div.co-actionwrap.top > div.jsch-cal-date-header.sch-cal-date-header > span.cal-date.sch-term-text > span:nth-child(1)")
+			if err != nil {
+				return err
+			}
+			targetY, targetM, targetD = extractDate(screenDate)
+			targetObj := createTimeDate(targetY, targetM, targetD)
+			hour = subtractHour(sentObj, targetObj)
+
+			time.Sleep(1 * time.Second)
+
+			if hour == 0 {
+				break
+			}
+		}
+	}
+	return nil
+}
+
+func createTimeDate(year string, month string, day string) time.Time {
+	location, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	y, _ := strconv.Atoi(year)
+	m := checkMonth(month)
+	d, _ := strconv.Atoi(day)
+	timeObj := time.Date(y, m, d, 0, 0, 0, 0, location)
+
+	return timeObj
+}
+
+// 日付の差分(hour)を返す
+func subtractHour(day1 time.Time, day2 time.Time) int {
+	subtract := day1.Sub(day2)
+	return int(subtract.Hours())
+}
+
+// 画面に表示されている日付を返す
+func checkScreenDate(page *agouti.Page, selector string) (string, error) {
+	screenDate := page.Find(selector)
+	if _, err := screenDate.Count(); err != nil {
+		return "", err
+	}
+	date, _ := screenDate.Text()
+	return date, nil
+}
+
+// 文字列から日付を抽出する
+func extractDate(str string) (string, string, string) {
+	var num, year, month, day string
+	for _, c := range str {
+		flag := checkRegexp(`[0-9]`, string(c))
+		if flag == true {
+			num = num + string(c)
+		} else {
+			switch string(c) {
+			case "年":
+				year = num
+				num = ""
+			case "月":
+				month = num
+				num = ""
+			case "日":
+				day = num
+				num = ""
+			}
+		}
+		if day != "" {
+			break
+		}
+	}
+	return year, month, day
+}
+
+// 正規表現
+func checkRegexp(reg, str string) bool {
+	r := regexp.MustCompile(reg).Match([]byte(str))
+	return r
+}
+
+func checkMonth(month string) time.Month {
+	var t time.Month
+	switch month {
+	case "1", "01":
+		t = time.January
+	case "2", "02":
+		t = time.February
+	case "3", "03":
+		t = time.March
+	case "4", "04":
+		t = time.April
+	case "5", "05":
+		t = time.May
+	case "6", "06":
+		t = time.June
+	case "7", "07":
+		t = time.July
+	case "8", "08":
+		t = time.August
+	case "9", "09":
+		t = time.September
+	case "10":
+		t = time.October
+	case "11":
+		t = time.November
+	case "12":
+		t = time.December
+	}
+	return t
+}
+
+func clickBtnByID(page *agouti.Page, id string) error {
+	btn := page.FindByID(id)
+	if _, err := btn.Count(); err != nil {
+		return err
+	}
+	btn.Click()
+	time.Sleep(1 * time.Second)
+	return nil
+}
+
+func clickBtnByClass(page *agouti.Page, class string) error {
+	btn := page.FindByClass(class)
+	if _, err := btn.Count(); err != nil {
+		return err
+	}
+	btn.Click()
+	time.Sleep(1 * time.Second)
+	return nil
+}
+
+func clickBtnByPath(page *agouti.Page, path string) error {
+	btn := page.Find(path)
+	if _, err := btn.Count(); err != nil {
+		return err
+	}
+	btn.Click()
+	time.Sleep(1 * time.Second)
+	return nil
+}
+
+func doubleClickByPath(page *agouti.Page, path string) error {
+	btn := page.Find(path)
+	if _, err := btn.Count(); err != nil {
+		return err
+	}
+	btn.DoubleClick()
+	time.Sleep(1 * time.Second)
+	return nil
+}
+
+func setDate(page *agouti.Page, startHour string, startMinute string, endHour string, endMinute string) error {
+	// get start hour list
+	startHours, err := getSelectBoxByClass(page, "co-timepicker-hour")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// search index
+	startHourIdx, err := searchIndex(startHours, startHour)
+	if err != nil {
+		return err
+	}
+
+	// set start hour
+	strtH := page.FirstByClass("co-timepicker-hour")
+	if _, err := strtH.Count(); err != nil {
+		return err
+	}
+	strtH.Select(startHours[startHourIdx])
+
+	// get start minute list
+	startMinutes, err := getSelectBoxByClass(page, "co-timepicker-minute")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// search index
+	startMinuteIdx, err := searchIndex(startMinutes, startMinute)
+	if err != nil {
+		log.Println(err)
+	}
+
+	// set start minute
+	strtM := page.FirstByClass("co-timepicker-minute")
+	if _, err := strtM.Count(); err != nil {
+		return err
+	}
+	strtM.Select(startMinutes[startMinuteIdx])
+
+	// get end hour list
+	// Desknetsの仕様上、startHourと同じクラスが指定されていて関数を利用できない
+	dom := getPageDOM(page).Find("select[class='co-timepicker-hour']").Last().Children()
+	endHours := make([]string, dom.Length())
+	dom.Each(func(i int, s *goquery.Selection) {
+		endHours[i] = s.Text()
+	})
+
+	// search index
+	endHourIdx, err := searchIndex(endHours, endHour)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// set end hour
+	endH := page.AllByClass("co-timepicker-hour").At(1)
+	if _, err := endH.Count(); err != nil {
+		return err
+	}
+	endH.Select(endHours[endHourIdx])
+
+	// get end minute list
+	// Desknetsの仕様上、startMinuteと同じクラスが指定されていて関数を利用できない
+	dom = getPageDOM(page).Find("select[class='co-timepicker-minute']").Last().Children()
+	endMinutes := make([]string, dom.Length())
+	dom.Each(func(i int, s *goquery.Selection) {
+		endMinutes[i] = s.Text()
+	})
+
+	// search index
+	endMinuteIdx, err := searchIndex(endMinutes, endMinute)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// set end minute
+	endM := page.AllByClass("co-timepicker-minute").At(1)
+	if _, err := endM.Count(); err != nil {
+		return err
+	}
+	endM.Select(endMinutes[endMinuteIdx])
+
+	time.Sleep(1 * time.Second)
+	return nil
+}
+
+func getFacilities(page *agouti.Page) ([]string, error) {
+	// click search button
+	if err := clickBtnByClass(page, "jsch-entry-plant-group-button"); err != nil {
+		return nil, err
+	}
+
+	dom := getPageDOM(page).Find("div[class='sch-entry-plant-free-list']").Find("ul").Children()
+	facilities := make([]string, dom.Length())
+	dom.Each(func(i int, s *goquery.Selection) {
+		facilities[i] = s.Find("label").Text()
+	})
+
+	return facilities, nil
+}
+
+func schedule(page *agouti.Page) error {
+	// login
+	if err := login(page, loginName); err != nil {
+		return err
+	}
+	time.Sleep(3 * time.Second) // Desknetsの仕様上、ログイン後、新しくコンテンツが読み込まれるまでに時間がかかる
+
+	// click schedule button
+	if err := clickBtnByPath(page, "#portal-content-1000 > div.portal-content-body > ul > li:nth-child(1)"); err != nil {
+		return err
+	}
+
+	// 送信された日付の画面を表示させる
+	date := "2020年03月16日(月)"
+	if err := comparePeriod(page, date); err != nil {
+		return err
+	}
+
+	// move to the booking page
+	if err := doubleClickByPath(page, "#jsch-schweekgrp > form > div.sch-gweek.sch-cal-group-week.jsch-cal-list.jco-print-template.sch-data-view-area > div.sch-gcal-target.me.cal-h-cell.jsch-cal > div.cal-h-week > table > tbody > tr > td:nth-child(1)"); err != nil {
+		return err
+	}
+
+	// set start and end datetime
+	if err := setDate(page, "10時", "30分", "12時", "0分"); err != nil {
+		return err
+	}
+
+	// click facility button
+	if err := clickBtnByPath(page, "#inputfrm > div.co-ebtnarea.sch-ebtnarea > a:nth-child(1)"); err != nil {
+		return err
+	}
+
+	// 空いている施設一覧を取得する
+	facilities, err := getFacilities(page)
+	if err != nil {
+		return err
+	}
+	log.Println(facilities)
+
+	return nil
+}
+
+func main() {
 	driver := agouti.ChromeDriver(agouti.Browser("chrome"))
 	if err := driver.Start(); err != nil {
-		fmt.Println("Failed to start driver:", err)
+		log.Fatalln(err)
 	}
 	defer driver.Stop()
 
 	page, err := driver.NewPage()
 	if err != nil {
-		fmt.Println("Failed to open new page:", err)
+		log.Fatalln(err)
 	}
 
-	// sample Cybozu
 	if err := page.Navigate(url); err != nil {
-		fmt.Println("Failed to navigate:", err)
+		log.Fatalln(err)
 	}
 
-	// login
-	login(page, loginName)
-
-	// get group list
-	groupsDom := getPageDOM(page).Find("select[name='GID']").Children()
-	groups := make([]string, groupsDom.Length())
-	groupsDom.Each(func(i int, sel *goquery.Selection) {
-		groups[i] = sel.Text()
-		// fmt.Println(i, groups[i])
-	})
-
-	// move to meeting room page
-	group := page.FindByName("GID")
-	if _, err := group.Count(); err != nil {
-		fmt.Println("Cannot find path:", err)
-	}
-	group.Select(groups[9]) // "(全施設)"
-
-	// make a reservation
-	// date := "2019年/4月/23(火)"
-	// start := "10:00"
-	// end := "11:30"
-	date := year + "年/" + month + "月/" + day + week
-	if err := booking(page, date, start, end, title, room); err != nil {
-		return err
-	}
+	schedule(page)
 
 	time.Sleep(3 * time.Second)
-	return nil
-}
-
-func Schedules(year string, month string, day string, start string, end string, people string) (string, error) {
-	// driver := agouti.ChromeDriver(agouti.Browser("chrome"))
-	driver := agouti.ChromeDriver(
-		agouti.ChromeOptions("args", []string{
-			"--headless",
-			"--disable-gpu",
-		}),
-		agouti.Debug,
-	)
-
-	if err := driver.Start(); err != nil {
-		fmt.Println("Failed to start driver:", err)
-	}
-	defer driver.Stop()
-
-	page, err := driver.NewPage()
-	if err != nil {
-		fmt.Println("Failed to open new page:", err)
-	}
-
-	// sample Cybozu
-	if err := page.Navigate(url); err != nil {
-		fmt.Println("Failed to navigate:", err)
-	}
-
-	// login
-	login(page, loginName)
-
-	// get group list
-	groupsDom := getPageDOM(page).Find("select[name='GID']").Children()
-	groups := make([]string, groupsDom.Length())
-	groupsDom.Each(func(i int, sel *goquery.Selection) {
-		groups[i] = sel.Text()
-		// fmt.Println(i, groups[i])
-	})
-
-	// move to meeting room page
-	group := page.FindByName("GID")
-	if _, err := group.Count(); err != nil {
-		fmt.Println("Cannot find path:", err)
-	}
-	group.Select(groups[10]) // "会議室"
-
-	// get schedules
-	schedulesDom := getPageDOM(page).Find("#redraw > table > tbody").Children()
-	rooms := make(map[string][]string, schedulesDom.Length())
-	schedulesDom.Each(func(i int, sel *goquery.Selection) {
-		if i == 0 {
-			sel.Children().Each(func(j int, cc *goquery.Selection) {
-				if j == 0 {
-					rooms["dates"] = []string{}
-				} else {
-					st := strings.TrimSpace(cc.Text())
-					rooms["dates"] = append(rooms["dates"], st)
-				}
-			})
-		} else {
-			roomName := "none"
-			sel.Children().Each(func(j int, cc *goquery.Selection) {
-				if j == 0 {
-					roomName = strings.Trim(cc.Children().First().First().Text(), " \n")
-					roomName = strings.TrimSpace(roomName)
-					rooms[roomName] = []string{}
-				} else {
-					st := strings.Trim(cc.Text(), "\n")
-					st = strings.TrimSpace(st)
-					rooms[roomName] = append(rooms[roomName], st)
-				}
-			})
-		}
-	})
-
-	for k, v := range rooms {
-		fmt.Printf("rooms[%v]: %v\n", k, v)
-	}
-
-	roomArr := []string{"第一会議室", "第二会議室", "打合せルーム"}
-
-	// time.Sleep(3 * time.Second)
-	return choice(roomArr), nil
-}
-
-// choose room randomly
-func choice(s []string) string {
-	rand.Seed(time.Now().UnixNano())
-	i := rand.Intn(len(s))
-	return s[i]
 }
