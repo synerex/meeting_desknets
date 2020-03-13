@@ -477,6 +477,54 @@ func execute(page *agouti.Page, title string, room string) error {
 	return nil
 }
 
+func cancelFacility(page *agouti.Page, title string) error {
+	// login
+	if err := login(page, loginName); err != nil {
+		return err
+	}
+	time.Sleep(3 * time.Second) // Desknetsの仕様上、ログイン後、新しくコンテンツが読み込まれるまでに時間がかかる
+
+	// click schedule button
+	if err := clickBtnByPath(page, "#portal-content-1000 > div.portal-content-body > ul > li:nth-child(1)"); err != nil {
+		return err
+	}
+
+	// 送信された日付の画面を表示させる
+	date := "2020年03月16日(月)"
+	if err := comparePeriod(page, date); err != nil {
+		return err
+	}
+
+	// titleからキャンセルする予定を探し、リンクを取得する
+	var href string
+	dom := getPageDOM(page).Find("div[class='cal-item-box ui-draggable']").Find("a")
+	dom.EachWithBreak(func(i int, s *goquery.Selection) bool {
+		if flag := strings.Contains(s.Text(), title); flag == true {
+			href, _ = s.Attr("href")
+			return false
+		}
+		return true
+	})
+
+	// キャンセルする予定の詳細に遷移
+	selector := "a[href='" + href + "']"
+	if err := doubleClickByPath(page, selector); err != nil {
+		return err
+	}
+
+	// 予定削除ボタンをクリック
+	if err := clickBtnByPath(page, "#inputfrm > div.co-actionwrap.bottom > div > input.jco-input-del-submit"); err != nil {
+		return err
+	}
+
+	// Confirm Delete
+	if err := clickBtnByPath(page, "#neodialog-cal-delconfirm-dialog > div.ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix > div > button:nth-child(1)"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func main() {
 	driver := agouti.ChromeDriver(agouti.Browser("chrome"))
 	if err := driver.Start(); err != nil {
@@ -493,8 +541,13 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	// schedule(page)
-	execute(page, "東京都対策委員会", "Room #1@Singapore")
+	if err := execute(page, "東京都対策委員会", "Room #1@Singapore"); err != nil {
+		log.Fatalln(err)
+	}
+
+	if err := cancelFacility(page, "東京都対策委員会"); err != nil {
+		log.Fatalln(err)
+	}
 
 	time.Sleep(3 * time.Second)
 }
