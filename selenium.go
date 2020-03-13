@@ -1,4 +1,4 @@
-package main
+package selenium
 
 import (
 	"errors"
@@ -102,17 +102,16 @@ func login(page *agouti.Page, user string) error {
 	return nil
 }
 
-func comparePeriod(page *agouti.Page, date string) error {
+func comparePeriod(page *agouti.Page, year string, month string, day string) error {
 	screenDate, err := checkScreenDate(page, "#jsch-schweekgrp > form > div.co-actionwrap.top > div.jsch-cal-date-header.sch-cal-date-header > span.cal-date.sch-term-text > span:nth-child(1)")
 	if err != nil {
 		return err
 	}
 
 	targetY, targetM, targetD := extractDate(screenDate)
-	sentY, sentM, sentD := extractDate(date)
 
 	targetObj := createTimeDate(targetY, targetM, targetD)
-	sentObj := createTimeDate(sentY, sentM, sentD)
+	sentObj := createTimeDate(year, month, day)
 
 	// 送られてきた日付の画面まで遷移する
 	hour := subtractHour(sentObj, targetObj)
@@ -391,7 +390,24 @@ func getFacilities(page *agouti.Page) (map[string]string, error) {
 	return facilities, nil
 }
 
-func schedule(page *agouti.Page) (map[string]string, error) {
+func Schedule(year string, month string, day string, start string, end string, title string, room string) (map[string]string, error) {
+	log.Println("Schedule is called:", year, month, day, start, end, title, room)
+
+	driver := agouti.ChromeDriver(agouti.Browser("chrome"))
+	if err := driver.Start(); err != nil {
+		log.Fatalln(err)
+	}
+	defer driver.Stop()
+
+	page, err := driver.NewPage()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	if err := page.Navigate(url); err != nil {
+		log.Fatalln(err)
+	}
+
 	// login
 	if err := login(page, loginName); err != nil {
 		return nil, err
@@ -404,8 +420,8 @@ func schedule(page *agouti.Page) (map[string]string, error) {
 	}
 
 	// 送信された日付の画面を表示させる
-	date := "2020年03月16日(月)"
-	if err := comparePeriod(page, date); err != nil {
+	// date := "2020年03月16日(月)"
+	if err := comparePeriod(page, year, month, day); err != nil {
 		return nil, err
 	}
 
@@ -442,8 +458,31 @@ func getPID(data map[string]string, target string) string {
 	return ""
 }
 
-func execute(page *agouti.Page, title string, room string) error {
-	facilities, err := schedule(page)
+func Execute(year string, month string, day string, start string, end string, title string, room string) error {
+	log.Println("Schedule is called:", year, month, day, start, end, title, room)
+
+	driver := agouti.ChromeDriver(agouti.Browser("chrome"))
+	if err := driver.Start(); err != nil {
+		log.Fatalln(err)
+	}
+	defer driver.Stop()
+
+	page, err := driver.NewPage()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	if err := page.Navigate(url); err != nil {
+		log.Fatalln(err)
+	}
+
+	// login
+	if err := login(page, loginName); err != nil {
+		return err
+	}
+	time.Sleep(3 * time.Second) // Desknetsの仕様上、ログイン後、新しくコンテンツが読み込まれるまでに時間がかかる
+
+	facilities, err := Schedule(year, month, day, start, end, title, room)
 	if err != nil {
 		return err
 	}
@@ -477,7 +516,24 @@ func execute(page *agouti.Page, title string, room string) error {
 	return nil
 }
 
-func cancelFacility(page *agouti.Page, title string) error {
+func Cancel(year string, month string, day string, title string) error {
+	log.Println("Schedule is called:", year, month, day, title)
+
+	driver := agouti.ChromeDriver(agouti.Browser("chrome"))
+	if err := driver.Start(); err != nil {
+		log.Fatalln(err)
+	}
+	defer driver.Stop()
+
+	page, err := driver.NewPage()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	if err := page.Navigate(url); err != nil {
+		log.Fatalln(err)
+	}
+
 	// login
 	if err := login(page, loginName); err != nil {
 		return err
@@ -490,8 +546,8 @@ func cancelFacility(page *agouti.Page, title string) error {
 	}
 
 	// 送信された日付の画面を表示させる
-	date := "2020年03月16日(月)"
-	if err := comparePeriod(page, date); err != nil {
+	// date := "2020年03月16日(月)"
+	if err := comparePeriod(page, year, month, day); err != nil {
 		return err
 	}
 
@@ -523,31 +579,4 @@ func cancelFacility(page *agouti.Page, title string) error {
 	}
 
 	return nil
-}
-
-func main() {
-	driver := agouti.ChromeDriver(agouti.Browser("chrome"))
-	if err := driver.Start(); err != nil {
-		log.Fatalln(err)
-	}
-	defer driver.Stop()
-
-	page, err := driver.NewPage()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	if err := page.Navigate(url); err != nil {
-		log.Fatalln(err)
-	}
-
-	if err := execute(page, "東京都対策委員会", "Room #1@Singapore"); err != nil {
-		log.Fatalln(err)
-	}
-
-	if err := cancelFacility(page, "東京都対策委員会"); err != nil {
-		log.Fatalln(err)
-	}
-
-	time.Sleep(3 * time.Second)
 }
