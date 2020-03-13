@@ -1,4 +1,4 @@
-package selenium
+package desknets // import "github.com/synerex/meeting_desknets"
 
 import (
 	"errors"
