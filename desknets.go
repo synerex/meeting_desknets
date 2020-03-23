@@ -72,7 +72,7 @@ func login(page *agouti.Page, user string) error {
 	// get user list
 	users, err := getSelectBoxByName(page, "uid")
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	// search index
@@ -391,7 +391,7 @@ func getFacilities(page *agouti.Page) (map[string]string, error) {
 }
 
 func Schedule(year string, month string, day string, start string, end string, title string, room string) (map[string]string, error) {
-	log.Println("Schedule is called:", year, month, day, start, end, title, room)
+	log.Println("Schedule in desknets is called:", year, month, day, start, end, title, room)
 
 	driver := agouti.ChromeDriver(agouti.Browser("chrome"))
 	if err := driver.Start(); err != nil {
@@ -459,7 +459,7 @@ func getPID(data map[string]string, target string) string {
 }
 
 func Execute(year string, month string, day string, start string, end string, title string, room string) error {
-	log.Println("Schedule is called:", year, month, day, start, end, title, room)
+	log.Println("Execute in desknets is called:", year, month, day, start, end, title, room)
 
 	driver := agouti.ChromeDriver(agouti.Browser("chrome"))
 	if err := driver.Start(); err != nil {
@@ -517,7 +517,7 @@ func Execute(year string, month string, day string, start string, end string, ti
 }
 
 func Cancel(year string, month string, day string, title string) error {
-	log.Println("Schedule is called:", year, month, day, title)
+	log.Println("Cancel in desknets is called:", year, month, day, title)
 
 	driver := agouti.ChromeDriver(agouti.Browser("chrome"))
 	if err := driver.Start(); err != nil {
