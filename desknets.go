@@ -390,6 +390,24 @@ func getFacilities(page *agouti.Page) (map[string]string, error) {
 	return facilities, nil
 }
 
+func formatTime(colon string) (string, string) {
+	log.Println("formatTime is called:", colon)
+	slice := strings.Split(colon, ":")
+	hour := slice[0] + "時"
+	var minute string
+	switch slice[1] {
+	case "00":
+		minute = "0分"
+	case "30":
+		minute = "30分"
+	default:
+		minute = "0分"
+		log.Println("Failed to set the minute at formatTime function in desknets")
+	}
+	log.Println("formatTime will return:", hour, minute)
+	return hour, minute
+}
+
 func Schedule(year string, month string, day string, start string, end string, title string, room string) (map[string]string, error) {
 	log.Println("Schedule in desknets is called:", year, month, day, start, end, title, room)
 
@@ -430,8 +448,12 @@ func Schedule(year string, month string, day string, start string, end string, t
 		return nil, err
 	}
 
+	// optimize time format
+	startHour, startMinute := formatTime(start)
+	endHour, endMinute := formatTime(end)
+
 	// set start and end datetime
-	if err := setDate(page, "10時", "30分", "12時", "0分"); err != nil {
+	if err := setDate(page, startHour, startMinute, endHour, endMinute); err != nil {
 		return nil, err
 	}
 
