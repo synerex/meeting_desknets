@@ -391,7 +391,6 @@ func getFacilities(page *agouti.Page) (map[string]string, error) {
 }
 
 func formatTime(colon string) (string, string) {
-	log.Println("formatTime is called:", colon)
 	slice := strings.Split(colon, ":")
 	hour := slice[0] + "時"
 	var minute string
@@ -404,7 +403,6 @@ func formatTime(colon string) (string, string) {
 		minute = "0分"
 		log.Println("Failed to set the minute at formatTime function in desknets")
 	}
-	log.Println("formatTime will return:", hour, minute)
 	return hour, minute
 }
 
